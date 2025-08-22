@@ -5,7 +5,6 @@ import (
 	"database/sql"
 	"fmt"
 	"io"
-	"math/rand"
 	"mime"
 	"net/http"
 	"net/url"
@@ -77,24 +76,18 @@ func main() {
 	wg.Wait()
 }
 
-func fetchWithProxy(targetURL string, proxyStr string, timeout time.Duration) ([]byte, error) {
-	useProxy := false
-	var transport *http.Transport
-	if useProxy && proxyStr != "" {
-		proxyURL, err := url.Parse(proxyStr)
-		if err != nil {
-			return nil, fmt.Errorf("invalid proxy URL %s: %w", proxyStr, err)
-		}
-		transport = &http.Transport{
-			Proxy: http.ProxyURL(proxyURL),
-		}
-	} else {
-		transport = &http.Transport{} // 不使用代理
+func fetchUrl(targetURL string) ([]byte, error) {
+	proxyStr := "http://127.0.0.1:7890"
+	proxyURL, err := url.Parse(proxyStr)
+	if err != nil {
+		return nil, err
 	}
 
 	client := &http.Client{
-		Transport: transport,
-		Timeout:   timeout,
+		Timeout: 60 * time.Second,
+		Transport: &http.Transport{
+			Proxy: http.ProxyURL(proxyURL),
+		},
 	}
 
 	req, err := http.NewRequest("GET", targetURL, nil)
@@ -102,13 +95,12 @@ func fetchWithProxy(targetURL string, proxyStr string, timeout time.Duration) ([
 		return nil, fmt.Errorf("error creating request: %w", err)
 	}
 
-	// 设置 headers
 	req.Header.Set("Cookie", "PHPSESSID=fehap6pvv43kuu7r4foskqi2dp; yj0M_5a0c_ulastactivity=1755685095%7C0; yj0M_5a0c_saltkey=wTb5t5gB; yj0M_5a0c_lastvisit=1755680847; yj0M_5a0c_lastact=1755685522%09forum.php%09viewthread; yj0M_5a0c__refer=%252Fhome.php%253Fmod%253Dspacecp%2526ac%253Dprofile%2526op%253Dpassword; yj0M_5a0c_auth=cf10GXGgtSukhwCS4cImZ9JYBSVvTghCdTsq1ht4qyebLeDNdTprQaXQm7vXC%2FDyke9L51ISDV24Z%2FENcwBPiu43hek; yj0M_5a0c_lastcheckfeed=588604%7C1755684455; yj0M_5a0c_lip=47.79.94.249%2C1755684455; yj0M_5a0c_sid=0; yj0M_5a0c_nofavfid=1; yj0M_5a0c_st_t=588604%7C1755685250%7C1cb744b1014d3a5af96469584e0de3cb; yj0M_5a0c_forum_lastvisit=D_102_1755684843D_72_1755684870D_103_1755685011D_40_1755685250; yj0M_5a0c_smile=1D1; yj0M_5a0c_st_p=588604%7C1755685522%7C591978a0f584979afc565ead1ec9e755; yj0M_5a0c_viewid=tid_1324402")
-	req.Header.Set("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) Go-http-client/1.1")
+	req.Header.Set("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:141.0) Gecko/20100101 Firefox/141.0")
 
 	resp, err := client.Do(req)
 	if err != nil {
-		return nil, fmt.Errorf("error accessing %s via proxy %s: %w", targetURL, proxyStr, err)
+		return nil, err
 	}
 	defer resp.Body.Close()
 
@@ -137,9 +129,9 @@ func fetchWithProxy(targetURL string, proxyStr string, timeout time.Duration) ([
 
 		return buf, nil
 	} else {
-		utf8Data, err := DetectAndConvertToUTF8(resp.Body)
+		utf8Data, err := ConvertToUTF8(resp.Body)
 		if err != nil {
-			panic(err)
+			return nil, err
 		}
 		return utf8Data, nil
 	}
@@ -151,17 +143,18 @@ func scrapeBookPage(tid int, db *sql.DB, wg *sync.WaitGroup) {
 		<-sem
 	}()
 
-	countries := []string{"AL", "AR", "AM", "AU", "AT", "AZ", "BD", "BY", "BE", "BO", "BR", "BG", "KH", "CA", "CL", "CN", "CO", "CR", "HR", "CY", "CZ", "DK", "DO", "EC", "EG", "EE", "FI", "FR", "GE", "DE", "GB", "GR", "HK", "HU", "IS", "IN", "ID", "IE", "IM", "IL", "IT", "JM", "JP", "JO", "KZ", "KG", "LA", "LV", "LT", "LU", "MY", "MX", "MD", "MA", "NL", "NZ", "NO", "PK", "PA", "PE", "PH", "PL", "PT", "RO", "RU", "SA", "SG", "SK", "ZA", "KR", "ES", "LK", "SE", "CH", "TW", "TJ", "TH", "TR", "TM", "UA", "AE", "US", "UZ", "VN"}
 	BookPageUrlString := baseUrlString + "forum.php?mod=viewthread&tid=" + strconv.Itoa(tid)
 	fmt.Printf("📖 Scraping Book %d ...\n", tid)
 
-	randomIndex := rand.Intn(9998) + 1
-	randomCountry := countries[rand.Intn(len(countries))]
-
-	proxyStr := fmt.Sprintf("http://oc-ab35117cd53146a5be0297f8b368339cb877481a6178015c64d8599f75127596-country-%s-session-%d:it5q47pegzmt@proxy.oculus-proxy.com:31114", randomCountry, randomIndex)
-	body, err := fetchWithProxy(BookPageUrlString, proxyStr, 6000*time.Second)
-	if err != nil {
-		panic(err)
+	var body []byte
+	var err error
+	for {
+		body, err = fetchUrl(BookPageUrlString)
+		if err == nil {
+			break
+		}
+		fmt.Println("retry...", err)
+		time.Sleep(2 * time.Second)
 	}
 
 	reader := bytes.NewReader(body)
@@ -173,20 +166,30 @@ func scrapeBookPage(tid int, db *sql.DB, wg *sync.WaitGroup) {
 	title := doc.Find("#thread_subject").First().Text()
 
 	content := ""
-	doc.Find("a").Each(func(i int, s *goquery.Selection) {
+	doc.Find("#postlist > div:nth-child(3) a").Each(func(i int, s *goquery.Selection) {
 		href, exists := s.Attr("href")
 		if exists {
 			if strings.HasPrefix(href, "forum.php?mod=attachment&aid=") {
+				if !strings.HasSuffix(s.Text(), ".txt") {
+					return
+				}
 				fileUrlString := baseUrlString + href
-				fmt.Printf("📁 Find File: %s, Link: %s\n", s.Text(), fileUrlString)
-				txt, err := fetchWithProxy(fileUrlString, proxyStr, 6000*time.Second)
-				if err != nil {
-					panic(err)
+				// fmt.Printf("📁 Find File: %s, Link: %s\n", s.Text(), fileUrlString)
+				var txt []byte
+				for {
+					txt, err = fetchUrl(fileUrlString)
+					if err == nil {
+						break
+					}
+					fmt.Println("retry...", err)
+					time.Sleep(2 * time.Second)
 				}
 				content = content + string(txt) + "\n"
 			}
 		}
 	})
+
+	fmt.Printf("⚜️ Book Compeleted: %s\n", title)
 
 	dbMutex.Lock()
 	insertSQL := `INSERT INTO novel (tid, title, content) VALUES (?, ?, ?)`
@@ -201,10 +204,15 @@ func scrapeBookListPage(page int, ch chan<- int, wg *sync.WaitGroup) {
 	defer wg.Done()
 	BookListPageUrlString := baseUrlString + mobileTXTUrlString + "&page=" + strconv.Itoa(page)
 	fmt.Printf("🌟 Scraping Page %d ...\n", page)
-	proxyStr := fmt.Sprintf("http://oc-ab35117cd53146a5be0297f8b368339cb877481a6178015c64d8599f75127596-country-US-session-%d:it5q47pegzmt@proxy.oculus-proxy.com:31114", page%9999)
-	body, err := fetchWithProxy(BookListPageUrlString, proxyStr, 6000*time.Second)
-	if err != nil {
-		panic(err)
+	var body []byte
+	var err error
+	for {
+		body, err = fetchUrl(BookListPageUrlString)
+		if err == nil {
+			break
+		}
+		fmt.Println("retry...", err)
+		time.Sleep(2 * time.Second)
 	}
 
 	reader := bytes.NewReader(body)
@@ -244,8 +252,7 @@ func scrapeBookListPage(page int, ch chan<- int, wg *sync.WaitGroup) {
 	})
 }
 
-// DetectAndConvertToUTF8 读取 resp.Body，自动检测编码并转换为 UTF-8
-func DetectAndConvertToUTF8(body io.ReadCloser) ([]byte, error) {
+func ConvertToUTF8(body io.ReadCloser) ([]byte, error) {
 	defer body.Close()
 
 	// 读取全部内容
@@ -263,22 +270,17 @@ func DetectAndConvertToUTF8(body io.ReadCloser) ([]byte, error) {
 
 	var enc encoding.Encoding
 
-	switch result.Charset {
-	case "UTF-8":
-		return data, nil // 已经是 UTF-8，无需转换
-	case "GB-18030", "GB-2312", "GBK":
+	if result.Charset == "UTF-8" {
+		return data, nil
+	} else {
 		enc = simplifiedchinese.GB18030
-	default:
-		// 可以扩展其他编码，或者直接返回原始字节
-		return data, fmt.Errorf("unsupported charset: %s", result.Charset)
-	}
+		// 转换为 UTF-8
+		reader := transform.NewReader(bytes.NewReader(data), enc.NewDecoder())
+		utf8Data, err := io.ReadAll(reader)
+		if err != nil {
+			return nil, err
+		}
 
-	// 转换为 UTF-8
-	reader := transform.NewReader(bytes.NewReader(data), enc.NewDecoder())
-	utf8Data, err := io.ReadAll(reader)
-	if err != nil {
-		return nil, err
+		return utf8Data, nil
 	}
-
-	return utf8Data, nil
 }
