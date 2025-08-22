@@ -28,10 +28,6 @@ var dbMutex sync.Mutex
 const baseUrlString = "https://ac1ss.ascwefkjw.com/"
 const mobileTXTUrlString = "forum.php?mod=forumdisplay&fid=40"
 
-const maxGoroutines = 1000
-
-var sem = make(chan struct{}, maxGoroutines)
-
 func main() {
 	db, _ = sql.Open("sqlite", "soushu-mobileTXT.db")
 	defer db.Close()
@@ -47,39 +43,42 @@ func main() {
 		panic(err)
 	}
 
-	totalPages := 1
-	tidChannel := make(chan int)
+	totalPages := 1330
 	var wg sync.WaitGroup
 
 	for i := 1; i <= totalPages; i++ {
+		tidChannel := make(chan int)
 		wg.Add(1)
 		go scrapeBookListPage(i, tidChannel, &wg)
-	}
 
-	go func() {
-		wg.Wait()
-		close(tidChannel)
-	}()
+		go func() {
+			wg.Wait()
+			close(tidChannel)
+		}()
 
-	tids := make([]int, 0)
-	for r := range tidChannel {
-		tids = append(tids, r)
-	}
-	fmt.Printf("✡️ Finished! total:%d\n", len(tids))
-
-	for i := range tids {
-		query := `SELECT EXISTS(SELECT 1 FROM novel WHERE tid=? LIMIT 1)`
-		err := db.QueryRow(query, i)
-		if err != nil {
-			fmt.Printf("📢 tid:%d Existed!\n", tids[i])
-			continue
+		tids := make([]int, 0)
+		for r := range tidChannel {
+			tids = append(tids, r)
 		}
-		wg.Add(1)
-		sem <- struct{}{}
-		go scrapeBookPage(tids[i], db, &wg)
-	}
+		fmt.Printf("✡️ Finished! total:%d\n", len(tids))
 
-	wg.Wait()
+		for i := range tids {
+			query := `SELECT EXISTS(SELECT 1 FROM novel WHERE tid=? LIMIT 1)`
+			row := db.QueryRow(query, tids[i])
+			var exists bool
+			if err := row.Scan(&exists); err != nil {
+				panic(err)
+			}
+			if exists {
+				fmt.Printf("📢 tid:%d Existed!\n", tids[i])
+				continue
+			}
+			wg.Add(1)
+			go scrapeBookPage(tids[i], db, &wg)
+		}
+
+		wg.Wait()
+	}
 }
 
 func fetchUrl(targetURL string) ([]byte, error) {
@@ -145,9 +144,6 @@ func fetchUrl(targetURL string) ([]byte, error) {
 
 func scrapeBookPage(tid int, db *sql.DB, wg *sync.WaitGroup) {
 	defer wg.Done()
-	defer func() {
-		<-sem
-	}()
 
 	BookPageUrlString := baseUrlString + "forum.php?mod=viewthread&tid=" + strconv.Itoa(tid)
 	fmt.Printf("📖 Scraping Book %d ...\n", tid)
