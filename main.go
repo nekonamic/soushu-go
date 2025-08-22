@@ -2,6 +2,7 @@ package main
 
 import (
 	"bytes"
+	"context"
 	"database/sql"
 	"fmt"
 	"io"
@@ -14,6 +15,7 @@ import (
 	"time"
 
 	"github.com/PuerkitoBio/goquery"
+	"github.com/chromedp/chromedp"
 	"github.com/saintfish/chardet"
 	"golang.org/x/net/html/charset"
 	"golang.org/x/text/encoding"
@@ -26,10 +28,12 @@ var db *sql.DB
 var dbMutex sync.Mutex
 
 const baseUrlString = "https://ac1ss.ascwefkjw.com/"
-const mobileTXTUrlString = "forum.php?mod=forumdisplay&fid=40"
+const mobileTXTUrlString = "forum.php?mod=forumdisplay&fid=103"
+
+const totalPages = 923
 
 func main() {
-	db, _ = sql.Open("sqlite", "soushu-mobileTXT.db")
+	db, _ = sql.Open("sqlite", "soushu-mobileTXT-2023.db")
 	defer db.Close()
 
 	createTableSQL := `
@@ -43,10 +47,9 @@ func main() {
 		panic(err)
 	}
 
-	totalPages := 1330
 	var wg sync.WaitGroup
 
-	for i := 1; i <= totalPages; i++ {
+	for i := 22; i <= totalPages; i++ {
 		tidChannel := make(chan int)
 		wg.Add(1)
 		go scrapeBookListPage(i, tidChannel, &wg)
@@ -132,11 +135,49 @@ func fetchUrl(targetURL string) ([]byte, error) {
 			return nil, fmt.Errorf("read body: %w", err)
 		}
 
+		if strings.HasPrefix(string(buf), "<script") {
+			fmt.Printf("🔑 JS Challenge: %s\n", string(buf)[:20])
+
+			ctx, cancel := chromedp.NewContext(context.Background())
+			defer cancel()
+
+			var url string
+			chromedp.Run(ctx,
+				chromedp.Navigate(targetURL),
+				chromedp.Evaluate(`document.location.href`, &url),
+			)
+
+			return fetchUrl(url)
+		}
+		if strings.Contains(string(buf), "您浏览的太快了，歇一会儿吧！") {
+			fmt.Println("⌛ Take A Break")
+			time.Sleep(1 * time.Minute)
+			return fetchUrl(targetURL)
+		}
 		return buf, nil
 	} else {
 		utf8Data, err := ConvertToUTF8(resp.Body)
 		if err != nil {
 			return nil, err
+		}
+		if strings.HasPrefix(string(utf8Data), "<script") {
+			fmt.Printf("🔑 JS Challenge: %s\n", string(utf8Data)[:20])
+
+			ctx, cancel := chromedp.NewContext(context.Background())
+			defer cancel()
+
+			var url string
+			chromedp.Run(ctx,
+				chromedp.Navigate(targetURL),
+				chromedp.Evaluate(`document.location.href`, &url),
+			)
+
+			return fetchUrl(url)
+		}
+		if strings.Contains(string(utf8Data), "您浏览的太快了，歇一会儿吧！") {
+			fmt.Println("⌛ Take A Break")
+			time.Sleep(1 * time.Minute)
+			return fetchUrl(targetURL)
 		}
 		return utf8Data, nil
 	}
@@ -155,7 +196,7 @@ func scrapeBookPage(tid int, db *sql.DB, wg *sync.WaitGroup) {
 		if err == nil {
 			break
 		}
-		fmt.Println("retry...", err)
+		fmt.Print("⌛ retry:"+BookPageUrlString, err)
 		time.Sleep(2 * time.Second)
 	}
 
@@ -191,7 +232,7 @@ func scrapeBookPage(tid int, db *sql.DB, wg *sync.WaitGroup) {
 		}
 	})
 
-	fmt.Printf("⚜️ Book Compeleted: %s\n", title)
+	fmt.Printf("⚜️ Book Compeleted: %s, Content Length: %d\n", title, len(content))
 
 	dbMutex.Lock()
 	insertSQL := `INSERT INTO novel (tid, title, content) VALUES (?, ?, ?)`
