@@ -196,7 +196,7 @@ func scrapeBookPage(tid int, db *sql.DB, wg *sync.WaitGroup) {
 		if err == nil {
 			break
 		}
-		fmt.Printf("⌛ retry: %s, %v", BookPageUrlString, err)
+		fmt.Printf("⌛ retry: %s, %v\n", BookPageUrlString, err)
 		time.Sleep(2 * time.Second)
 	}
 
@@ -224,7 +224,7 @@ func scrapeBookPage(tid int, db *sql.DB, wg *sync.WaitGroup) {
 					if err == nil {
 						break
 					}
-					fmt.Printf("⌛ retry: %s, %v", fileUrlString, err)
+					fmt.Printf("⌛ retry: %s, %v\n", fileUrlString, err)
 					time.Sleep(2 * time.Second)
 				}
 				content = content + string(txt) + "\n"
@@ -254,7 +254,7 @@ func scrapeBookListPage(page int, ch chan<- int, wg *sync.WaitGroup) {
 		if err == nil {
 			break
 		}
-		fmt.Printf("⌛ retry: %s, %v", BookListPageUrlString, err)
+		fmt.Printf("⌛ retry: %s, %v\n", BookListPageUrlString, err)
 		time.Sleep(2 * time.Second)
 	}
 
