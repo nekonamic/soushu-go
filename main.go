@@ -49,7 +49,7 @@ func main() {
 
 	var wg sync.WaitGroup
 
-	for i := 22; i <= totalPages; i++ {
+	for i := 24; i <= totalPages; i++ {
 		tidChannel := make(chan int)
 		wg.Add(1)
 		go scrapeBookListPage(i, tidChannel, &wg)
@@ -92,7 +92,7 @@ func fetchUrl(targetURL string) ([]byte, error) {
 	}
 
 	client := &http.Client{
-		Timeout: 10 * time.Second,
+		Timeout: 60 * time.Second,
 		Transport: &http.Transport{
 			Proxy: http.ProxyURL(proxyURL),
 		},
@@ -196,7 +196,7 @@ func scrapeBookPage(tid int, db *sql.DB, wg *sync.WaitGroup) {
 		if err == nil {
 			break
 		}
-		fmt.Print("⌛ retry:"+BookPageUrlString, err)
+		fmt.Printf("⌛ retry: %s, %v", BookPageUrlString, err)
 		time.Sleep(2 * time.Second)
 	}
 
@@ -224,7 +224,7 @@ func scrapeBookPage(tid int, db *sql.DB, wg *sync.WaitGroup) {
 					if err == nil {
 						break
 					}
-					fmt.Println("⌛ retry:"+fileUrlString, err)
+					fmt.Printf("⌛ retry: %s, %v", fileUrlString, err)
 					time.Sleep(2 * time.Second)
 				}
 				content = content + string(txt) + "\n"
@@ -254,7 +254,7 @@ func scrapeBookListPage(page int, ch chan<- int, wg *sync.WaitGroup) {
 		if err == nil {
 			break
 		}
-		fmt.Println("⌛ retry:"+BookListPageUrlString, err)
+		fmt.Printf("⌛ retry: %s, %v", BookListPageUrlString, err)
 		time.Sleep(2 * time.Second)
 	}
 
