@@ -78,16 +78,23 @@ func main() {
 }
 
 func fetchWithProxy(targetURL string, proxyStr string, timeout time.Duration) ([]byte, error) {
-	proxyURL, err := url.Parse(proxyStr)
-	if err != nil {
-		return nil, fmt.Errorf("invalid proxy URL %s: %w", proxyStr, err)
+	useProxy := false
+	var transport *http.Transport
+	if useProxy && proxyStr != "" {
+		proxyURL, err := url.Parse(proxyStr)
+		if err != nil {
+			return nil, fmt.Errorf("invalid proxy URL %s: %w", proxyStr, err)
+		}
+		transport = &http.Transport{
+			Proxy: http.ProxyURL(proxyURL),
+		}
+	} else {
+		transport = &http.Transport{} // 不使用代理
 	}
 
 	client := &http.Client{
-		Transport: &http.Transport{
-			Proxy: http.ProxyURL(proxyURL),
-		},
-		Timeout: timeout,
+		Transport: transport,
+		Timeout:   timeout,
 	}
 
 	req, err := http.NewRequest("GET", targetURL, nil)
@@ -95,6 +102,7 @@ func fetchWithProxy(targetURL string, proxyStr string, timeout time.Duration) ([
 		return nil, fmt.Errorf("error creating request: %w", err)
 	}
 
+	// 设置 headers
 	req.Header.Set("Cookie", "PHPSESSID=fehap6pvv43kuu7r4foskqi2dp; yj0M_5a0c_ulastactivity=1755685095%7C0; yj0M_5a0c_saltkey=wTb5t5gB; yj0M_5a0c_lastvisit=1755680847; yj0M_5a0c_lastact=1755685522%09forum.php%09viewthread; yj0M_5a0c__refer=%252Fhome.php%253Fmod%253Dspacecp%2526ac%253Dprofile%2526op%253Dpassword; yj0M_5a0c_auth=cf10GXGgtSukhwCS4cImZ9JYBSVvTghCdTsq1ht4qyebLeDNdTprQaXQm7vXC%2FDyke9L51ISDV24Z%2FENcwBPiu43hek; yj0M_5a0c_lastcheckfeed=588604%7C1755684455; yj0M_5a0c_lip=47.79.94.249%2C1755684455; yj0M_5a0c_sid=0; yj0M_5a0c_nofavfid=1; yj0M_5a0c_st_t=588604%7C1755685250%7C1cb744b1014d3a5af96469584e0de3cb; yj0M_5a0c_forum_lastvisit=D_102_1755684843D_72_1755684870D_103_1755685011D_40_1755685250; yj0M_5a0c_smile=1D1; yj0M_5a0c_st_p=588604%7C1755685522%7C591978a0f584979afc565ead1ec9e755; yj0M_5a0c_viewid=tid_1324402")
 	req.Header.Set("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) Go-http-client/1.1")
 
@@ -121,7 +129,6 @@ func fetchWithProxy(targetURL string, proxyStr string, timeout time.Duration) ([
 		if err != nil {
 			return nil, fmt.Errorf("charset reader: %w", err)
 		}
-		defer resp.Body.Close()
 
 		buf, err := io.ReadAll(reader)
 		if err != nil {
