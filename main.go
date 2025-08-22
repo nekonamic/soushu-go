@@ -67,7 +67,13 @@ func main() {
 	}
 	fmt.Printf("✡️ Finished! total:%d\n", len(tids))
 
-	for i := 0; i < len(tids); i++ {
+	for i := range tids {
+		query := `SELECT EXISTS(SELECT 1 FROM novel WHERE tid=? LIMIT 1)`
+		err := db.QueryRow(query, i)
+		if err != nil {
+			fmt.Printf("📢 tid:%d Existed!\n", tids[i])
+			continue
+		}
 		wg.Add(1)
 		sem <- struct{}{}
 		go scrapeBookPage(tids[i], db, &wg)
