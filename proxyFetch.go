@@ -33,7 +33,8 @@ var (
 const getProxyStr = "http://api2.xkdaili.com/tools/XApi.ashx?apikey=XK18C8EF13FE102BF294&qty=1&format=txt&split=0&sign=9bcab6037ea8275aebe49d5c04989c4a"
 
 func getProxy() (string, error) {
-	for i := 0; i < 5; i++ { // 最多尝试5次
+	for i := 0; i < 5; i++ { // 最多重试 5 次
+		// 获取代理
 		resp, err := http.Get(getProxyStr)
 		if err != nil {
 			return "", err
@@ -44,44 +45,31 @@ func getProxy() (string, error) {
 			return "", err
 		}
 
-		proxy := "http://" + strings.TrimSpace(string(body))
-		if checkProxy(proxy) {
-			fmt.Println("代理可用")
+		proxy := "http://" + strings.TrimSuffix(string(body), "\n")
+		fmt.Println(proxy)
+
+		proxyURL, _ := url.Parse(proxy)
+		client := &http.Client{
+			Transport: &http.Transport{
+				Proxy:           http.ProxyURL(proxyURL),
+				TLSClientConfig: &tls.Config{InsecureSkipVerify: true},
+			},
+			Timeout: 60 * time.Second,
+		}
+
+		req, _ := http.NewRequest("GET", "https://3cbg9.sdgvre54q.com/", nil)
+
+		req.Header.Set("Cookie", "yj0M_eda4_saltkey=Zj2pqQCn; yj0M_eda4_lastvisit=1756258948; yj0M_eda4_lastact=1756262702%09index.php%09; PHPSESSID=ollfild76oisbps0h8shvvnh7l; yj0M_eda4_st_t=2527028%7C1756262620%7C847996d4cad16b3af85a3f76d1da95b6; yj0M_eda4_sendmail=1; yj0M_eda4_ulastactivity=1756262607%7C0; yj0M_eda4_auth=cb86O5Ui0pLJxSEbgg7pzR9RVTGzjUotZC5Bd5e2KlpjlUFN9zqA7ySaR5AApNnLc6aMKhfgwqqd9uXBQDNsDANcbP5C; yj0M_eda4_lastcheckfeed=2527028%7C1756262607; yj0M_eda4_lip=221.6.242.203%2C1756262607; yj0M_eda4_sid=0; yj0M_eda4_forum_lastvisit=D_102_1756262620")
+		req.Header.Set("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:141.0) Gecko/20100101 Firefox/141.0")
+
+		testResp, err := client.Do(req)
+		if err != nil {
 			return proxy, nil
 		}
-		fmt.Println("代理不可用，尝试获取新代理...")
-		time.Sleep(time.Second) // 等待1秒再尝试
+		defer testResp.Body.Close()
 	}
+
 	return "", fmt.Errorf("无法获取可用代理")
-}
-
-// checkProxy 测试代理是否可用
-func checkProxy(proxy string) bool {
-	proxyURL, _ := url.Parse(proxy)
-	client := &http.Client{
-		Transport: &http.Transport{
-			Proxy: http.ProxyURL(proxyURL),
-		},
-		Timeout: 5 * time.Second, // 超时设置
-	}
-
-	resp, err := client.Get("https://4.ipw.cn")
-	if err != nil {
-		return false
-	}
-	defer resp.Body.Close()
-
-	body, err := io.ReadAll(resp.Body)
-	if err != nil {
-		return false
-	}
-
-	content := string(body)
-	// 简单判断返回内容是否包含 IP 格式
-	if strings.Contains(content, ".") {
-		return true
-	}
-	return false
 }
 
 // 用代理处理一个任务
@@ -123,14 +111,14 @@ func processTask(task Task, proxy string) {
 	task.Result <- Result{Body: buf, Err: nil}
 }
 
-// 调度器：一个代理用 10 次后换新代理
+// 调度器：一个代理用 90 次后换新代理
 func scheduler() {
 	var currentProxy string
 	var count int
 
 	for task := range taskCh {
-		// 没有代理或代理已用 10 次，就换一个
-		if currentProxy == "" || count >= 10 {
+		// 没有代理或代理已用 9 次，就换一个
+		if currentProxy == "" || count >= 9 {
 			proxy, err := getProxy()
 			if err != nil {
 				task.Result <- Result{Body: []byte{}, Err: fmt.Errorf("获取代理失败: %w", err)}
