@@ -1,16 +1,23 @@
 package main
 
 import (
+	"bytes"
 	"database/sql"
 	"encoding/json"
 	"fmt"
+	"io"
+	"net/http"
+	"net/http/cookiejar"
 	"net/url"
 	"os"
+	"path/filepath"
 	"strings"
 	"time"
 
 	"github.com/go-rod/rod"
 	"github.com/go-rod/rod/lib/proto"
+	"github.com/saintfish/chardet"
+	"golang.org/x/text/encoding/simplifiedchinese"
 	_ "modernc.org/sqlite"
 
 	"soushu-go/cookies"
@@ -23,7 +30,10 @@ type Config struct {
 	DownloadPath string `json:"downloadPath"`
 }
 
+var currentProxy int
+
 func main() {
+	currentProxy = 0
 	configRaw, err := os.ReadFile("./config.json")
 	if err != nil {
 		panic(err)
@@ -49,7 +59,8 @@ func main() {
 
 	browser := rod.New().MustConnect()
 	defer browser.MustClose()
-	browser.SetCookies(cookies.Get())
+	rodCookies := cookies.Get()
+	browser.SetCookies(rodCookies)
 
 	fmt.Println(config.BaseUrl + config.PathUrl)
 	menuPage := OpenValidPage(browser, config.BaseUrl+config.PathUrl)
@@ -70,6 +81,7 @@ func main() {
 
 			if strings.Contains(*href, "adver") {
 				fmt.Println("adver")
+				continue
 			}
 
 			u, _ := url.Parse(*href)
@@ -114,19 +126,35 @@ func main() {
 					fmt.Println("Get Post Error: ", config.BaseUrl+*href)
 					panic(err)
 				}
-				for _, post := range posts {
-					aElements, err := post.Elements("a")
-					if err != nil {
-						fmt.Println("Get A Elements Error: ", config.BaseUrl+*href)
-						panic(err)
-					}
-					for _, aElement := range aElements {
-						href, _ := aElement.Attribute("href")
-						if strings.HasPrefix(*href, "forum.php?mod=attachment&aid=") {
-							fmt.Println(*href)
-						}
+
+				var post *rod.Element
+				if config.Type == 0 {
+					post = posts[0]
+				} else if config.Type == 1 {
+					post = posts[1]
+				}
+				aElements, err := post.Elements("a")
+				if err != nil {
+					fmt.Println("Get A Elements Error: ", config.BaseUrl+*href)
+					panic(err)
+				}
+
+				isEmpty := true
+				for _, aElement := range aElements {
+					href, _ := aElement.Attribute("href")
+					if strings.HasPrefix(*href, "forum.php?mod=attachment&aid=") {
+						DownloadValidFile(browser, config.BaseUrl+*href, config.DownloadPath+"/"+tid, rodCookies)
+						isEmpty = false
 					}
 				}
+				if !isEmpty {
+					db.Exec(`
+						INSERT INTO novels (
+							tid, title, content
+						) VALUES (?, ?, ?)
+					`, tid, titleStr, "")
+				}
+				threadPage.Close()
 			}
 		}
 	}
@@ -164,61 +192,132 @@ func OpenValidPage(browser *rod.Browser, url string) *rod.Page {
 	}
 }
 
-// func DownloadValidFile(browser *rod.Browser, url string) {
-// 	for {
-// 		page, err := browser.Page(proto.TargetCreateTarget{URL: url})
-// 		if err != nil {
-// 			fmt.Println("Create Page Error")
-// 			panic(err)
-// 		}
+func DownloadValidFile(browser *rod.Browser, url string, path string, rodCookies []*proto.NetworkCookieParam) {
+	jar, _ := cookiejar.New(nil)
 
-// 		contentType := ""
-// 		done := make(chan struct{})
+	u, err := http.NewRequest("GET", url, nil)
+	if err != nil {
+		panic(err)
+	}
+	cookies := []*http.Cookie{}
+	for _, c := range rodCookies {
+		cookies = append(cookies, &http.Cookie{
+			Name:   c.Name,
+			Value:  c.Value,
+			Domain: c.Domain,
+			Path:   c.Path,
+		})
+	}
+	jar.SetCookies(u.URL, cookies)
 
-// 		cancel := page.Browser().EachEvent(func(e *proto.NetworkResponseReceived) {
-// 			if e.Type == proto.NetworkResourceTypeDocument && e.Response.URL == url {
-// 				if ct, ok := e.Response.Headers["content-type"]; ok {
-// 					contentType = strings.ToLower(ct.String())
-// 				}
-// 				close(done)
-// 			}
-// 		})
-// 		defer cancel()
+	client := &http.Client{Jar: jar}
 
-// 		<-done
+	resp, err := client.Get(url)
+	if err != nil {
+		panic(err)
+	}
+	defer resp.Body.Close()
 
-// 		if strings.HasPrefix(contentType, "text/html") {
-// 			fmt.Println("Not File")
-// 			continue
-// 		}
+	ct := resp.Header.Get("Content-Type")
+	fmt.Println("文件:", url, "Content-Type:", ct)
 
-// 		resp, err := http.Get(url)
-// 		if err != nil {
-// 			return nil, "", err
-// 		}
-// 		defer resp.Body.Close()
+	if !strings.Contains(ct, "text/html") {
+		var filename string
+		cd := resp.Header.Get("Content-Disposition")
+		if strings.Contains(cd, "filename=") {
+			parts := strings.Split(cd, "filename=")
+			if len(parts) > 1 {
+				fn := strings.Trim(parts[1], "\" ")
+				if fn != "" {
+					filename = ConvertToUTF8(fn)
+				}
+			}
+		}
+		fmt.Println("文件名: ", filename)
 
-// 		// 确定文件名
-// 		filename := "downloaded_file"
-// 		if strings.Contains(url, "/") {
-// 			parts := strings.Split(url, "/")
-// 			filename = parts[len(parts)-1]
-// 		}
-// 		filepath := downloadDir + "/" + filename
+		saveDir := filepath.Join(".", path)
+		if err := os.MkdirAll(saveDir, os.ModePerm); err != nil {
+			panic(err)
+		}
 
-// 		// 保存文件
-// 		out, err := os.Create(filepath)
-// 		if err != nil {
-// 			return nil, "", err
-// 		}
-// 		defer out.Close()
-// 		_, err = io.Copy(out, resp.Body)
-// 		if err != nil {
-// 			return nil, "", err
-// 		}
+		fullPath := filepath.Join(saveDir, filename)
+		out, err := os.Create(fullPath)
+		if err != nil {
+			panic(err)
+		}
+		defer out.Close()
 
-// 		// 下载完成，关闭 page
-// 		_ = page.Close()
-// 		return nil, filepath, nil
-// 	}
-// }
+		_, err = io.Copy(out, resp.Body)
+		if err != nil {
+			panic(err)
+		}
+
+		fmt.Println("已下载:", fullPath)
+	} else {
+		fmt.Println("文件返回HTML")
+	}
+}
+
+func ConvertToUTF8(input string) string {
+	data := []byte(input)
+
+	detector := chardet.NewTextDetector()
+	result, err := detector.DetectBest(data)
+	if err != nil {
+		panic(err)
+	}
+
+	enc := strings.ToLower(result.Charset)
+	if enc == "utf-8" {
+		return input
+	}
+
+	utf8Data, err := simplifiedchinese.GBK.NewDecoder().Bytes(data)
+	if err != nil {
+		panic(err)
+	}
+
+	return string(utf8Data)
+}
+
+func ChangeProxy() {
+	currentProxy++
+	if currentProxy%117 == 0 {
+		currentProxy = 0
+	}
+	var useProxy string
+	if currentProxy%10 == 0 {
+		useProxy = "direct"
+	} else {
+		useProxy = string(currentProxy)
+	}
+	url := "http://127.0.0.1:59999/proxies/selected"
+	body, err := json.Marshal(map[string]string{
+		"name": useProxy,
+	})
+	if err != nil {
+		panic(err)
+	}
+
+	req, err := http.NewRequest(http.MethodPut, url, bytes.NewBuffer(body))
+	if err != nil {
+		panic(err)
+	}
+	req.Header.Set("Content-Type", "application/json")
+
+	client := &http.Client{}
+	resp, err := client.Do(req)
+	if err != nil {
+		panic(err)
+	}
+	defer resp.Body.Close()
+
+	respBody, _ := io.ReadAll(resp.Body)
+
+	if resp.StatusCode == http.StatusNoContent {
+		fmt.Println("proxy changed", useProxy)
+	} else {
+		fmt.Println("change proxy error http", string(respBody))
+	}
+	time.Sleep(time.Second)
+}
