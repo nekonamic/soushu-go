@@ -68,6 +68,7 @@ func main() {
 	defer browser.MustClose()
 	rodCookies := cookies.Get()
 	browser.SetCookies(rodCookies)
+	browser.MustPage()
 
 	logFile, err := os.OpenFile("current.log", os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0644)
 	if err != nil {
@@ -193,6 +194,7 @@ func main() {
 			}
 			nextHref, _ := nextElement.Attribute("href")
 			currentMenuUrl = *nextHref
+			menuPage.Close()
 		} else {
 			fmt.Println("Finish")
 			break
