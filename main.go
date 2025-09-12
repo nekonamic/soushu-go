@@ -31,9 +31,11 @@ type Config struct {
 	PathUrl      string `json:"pathUrl"`
 	Type         int8   `json:"type"`
 	DownloadPath string `json:"downloadPath"`
+	UseProxy     bool   `json:"useProxy"`
 }
 
 var currentProxy int
+var useProxy bool
 
 func main() {
 	currentProxy = 0
@@ -46,6 +48,7 @@ func main() {
 	if err := json.Unmarshal(configRaw, &config); err != nil {
 		panic(err)
 	}
+	useProxy = config.UseProxy
 
 	db, err := sql.Open("sqlite", fmt.Sprintf("file:%s.db", config.DownloadPath))
 	if err != nil {
@@ -349,43 +352,47 @@ func ConvertToUTF8(input string) string {
 }
 
 func ChangeProxy() {
-	currentProxy++
-	if currentProxy%117 == 0 {
-		currentProxy = 0
-	}
-	var useProxy string
-	if currentProxy%10 == 0 {
-		useProxy = "direct"
+	if useProxy {
+		currentProxy++
+		if currentProxy%117 == 0 {
+			currentProxy = 0
+		}
+		var useProxy string
+		if currentProxy%10 == 0 {
+			useProxy = "direct"
+		} else {
+			useProxy = strconv.Itoa(currentProxy)
+		}
+		url := "http://127.0.0.1:59999/proxies/selected"
+		body, err := json.Marshal(map[string]string{
+			"name": useProxy,
+		})
+		if err != nil {
+			panic(err)
+		}
+
+		req, err := http.NewRequest(http.MethodPut, url, bytes.NewBuffer(body))
+		if err != nil {
+			panic(err)
+		}
+		req.Header.Set("Content-Type", "application/json")
+
+		client := &http.Client{}
+		resp, err := client.Do(req)
+		if err != nil {
+			panic(err)
+		}
+		defer resp.Body.Close()
+
+		respBody, _ := io.ReadAll(resp.Body)
+
+		if resp.StatusCode == http.StatusNoContent {
+			fmt.Println("Proxy Changed", useProxy)
+		} else {
+			fmt.Println("Change Proxy Error", string(respBody))
+		}
+		time.Sleep(time.Second)
 	} else {
-		useProxy = strconv.Itoa(currentProxy)
+		time.Sleep(5 * time.Second)
 	}
-	url := "http://127.0.0.1:59999/proxies/selected"
-	body, err := json.Marshal(map[string]string{
-		"name": useProxy,
-	})
-	if err != nil {
-		panic(err)
-	}
-
-	req, err := http.NewRequest(http.MethodPut, url, bytes.NewBuffer(body))
-	if err != nil {
-		panic(err)
-	}
-	req.Header.Set("Content-Type", "application/json")
-
-	client := &http.Client{}
-	resp, err := client.Do(req)
-	if err != nil {
-		panic(err)
-	}
-	defer resp.Body.Close()
-
-	respBody, _ := io.ReadAll(resp.Body)
-
-	if resp.StatusCode == http.StatusNoContent {
-		fmt.Println("Proxy Changed", useProxy)
-	} else {
-		fmt.Println("Change Proxy Error", string(respBody))
-	}
-	time.Sleep(time.Second)
 }
