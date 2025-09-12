@@ -1,6 +1,6 @@
 {
     "baseUrl": "https://3cbg9.sdgvre54q.com/",
-    "pathUrl": "forum.php?mod=forumdisplay&fid=104",
+    "pathUrl": "forum.php?mod=forumdisplay&fid=103&page=17",
     "type": 0,
     "downloadPath": "downloads",
     "useProxy": true

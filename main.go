@@ -6,7 +6,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
-	"net"
 	"net/http"
 	"net/http/cookiejar"
 	"net/url"
@@ -209,13 +208,13 @@ func OpenValidPage(browser *rod.Browser, url string) *rod.Page {
 	for {
 		page, err := browser.Page(proto.TargetCreateTarget{URL: url})
 		if err != nil {
-			fmt.Println("Create Page Error")
+			fmt.Println("Create Page Error", err)
 			_ = page.Close()
 			ChangeProxy()
 			continue
 		}
 
-		err = page.Timeout(5 * time.Second).WaitLoad()
+		err = page.Timeout(20 * time.Second).WaitLoad()
 		if err != nil {
 			fmt.Println("Wait Load Timeout/Error:", err)
 			_ = page.Close()
@@ -230,8 +229,10 @@ func OpenValidPage(browser *rod.Browser, url string) *rod.Page {
 			continue
 		}
 
-		if strings.Contains(html, "您浏览的太快了，歇一会儿吧！") || strings.Contains(html, "Database Error") {
-			fmt.Println("Too Fast or Database Error")
+		if strings.Contains(html, "您浏览的太快了，歇一会儿吧！") ||
+			strings.Contains(html, "Database Error") ||
+			strings.Contains(html, "502 Bad Gateway") {
+			fmt.Println("Server Side Error")
 			_ = page.Close()
 			ChangeProxy()
 			continue
@@ -267,12 +268,8 @@ func DownloadValidFile(browser *rod.Browser, url string, path string, rodCookies
 	for {
 		resp, err := client.Get(url)
 		if err != nil {
-			if netErr, ok := err.(net.Error); ok && netErr.Timeout() {
-				ChangeProxy()
-				continue
-			} else {
-				panic(err)
-			}
+			ChangeProxy()
+			continue
 		}
 		defer resp.Body.Close()
 
