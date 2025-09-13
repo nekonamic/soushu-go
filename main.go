@@ -304,7 +304,9 @@ func DownloadValidFile(browser *rod.Browser, url string, path string, rodCookies
 
 			_, err = io.Copy(out, resp.Body)
 			if err != nil {
-				panic(err)
+				fmt.Println("Read Body Error: ", err)
+				ChangeProxy()
+				continue
 			}
 
 			fmt.Println("Downloaded: ", fullPath)
