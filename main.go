@@ -81,7 +81,7 @@ func main() {
 
 	currentMenuUrl := config.PathUrl
 	for {
-		if _, err := logFile.WriteString(currentMenuUrl); err != nil {
+		if _, err := logFile.WriteString(currentMenuUrl + "\n"); err != nil {
 			fmt.Println("Write Log Error")
 			panic(err)
 		}
@@ -206,17 +206,14 @@ func main() {
 
 func OpenValidPage(browser *rod.Browser, url string) *rod.Page {
 	for {
-		page, err := browser.Page(proto.TargetCreateTarget{URL: url})
+		page := browser.MustPage()
+		err := rod.Try(func() {
+			wait := page.WaitEvent(proto.PageDomContentEventFired{})
+			page.Timeout(10 * time.Second).MustNavigate(url)
+			wait()
+		})
 		if err != nil {
-			fmt.Println("Create Page Error", err)
-			_ = page.Close()
-			ChangeProxy()
-			continue
-		}
-
-		err = page.Timeout(20 * time.Second).WaitLoad()
-		if err != nil {
-			fmt.Println("Wait Load Timeout/Error:", err)
+			fmt.Println("Navigate Error: ", err)
 			_ = page.Close()
 			ChangeProxy()
 			continue
