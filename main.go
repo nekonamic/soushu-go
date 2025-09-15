@@ -127,15 +127,6 @@ func main() {
 				} else {
 					threadPage := OpenValidPage(browser, config.BaseUrl+*href)
 					if threadPage == nil {
-						continue
-					}
-					html, err := threadPage.HTML()
-					if err != nil {
-						panic(err)
-					}
-
-					if strings.Contains(html, "没有找到帖子") {
-						fmt.Println("Not Found")
 						_ = threadPage.Close()
 						continue
 					}
@@ -161,7 +152,7 @@ func main() {
 						if len(posts) > 1 {
 							post = posts[1]
 						} else {
-							threadPage.Close()
+							_ = threadPage.Close()
 							continue
 						}
 					}
