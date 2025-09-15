@@ -226,6 +226,7 @@ func OpenValidPage(browser *rod.Browser, url string) *rod.Page {
 			continue
 		} else if strings.Contains(html, "没有找到帖子") {
 			fmt.Println("Not Found Thread")
+			_ = page.Close()
 			return nil
 		}
 
