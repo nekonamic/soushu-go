@@ -198,8 +198,9 @@ func main() {
 func OpenValidPage(browser *rod.Browser, url string) *rod.Page {
 	for {
 		page := browser.MustPage()
+		fmt.Println("Opening: ", url)
 		err := rod.Try(func() {
-			wait := page.WaitEvent(proto.PageDomContentEventFired{})
+			wait := page.Timeout(10 * time.Second).WaitEvent(proto.PageDomContentEventFired{})
 			page.Timeout(10 * time.Second).MustNavigate(url)
 			wait()
 		})
@@ -209,6 +210,7 @@ func OpenValidPage(browser *rod.Browser, url string) *rod.Page {
 			ChangeProxy()
 			continue
 		}
+		fmt.Println("Opened")
 
 		html, err := page.HTML()
 		if err != nil {
