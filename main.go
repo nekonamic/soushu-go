@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"net"
 	"net/http"
 	"net/http/cookiejar"
 	"net/url"
@@ -133,7 +134,7 @@ func main() {
 						panic(err)
 					}
 
-					if strings.Contains(html, "没有找到帖子") || strings.Contains(html, "Database Error") {
+					if strings.Contains(html, "没有找到帖子") {
 						fmt.Println("Not Found")
 						_ = threadPage.Close()
 						continue
@@ -260,7 +261,20 @@ func DownloadValidFile(browser *rod.Browser, url string, path string, rodCookies
 	}
 	jar.SetCookies(u.URL, cookies)
 
-	client := &http.Client{Jar: jar}
+	transport := &http.Transport{
+		DialContext: (&net.Dialer{
+			Timeout:   10 * time.Second,
+			KeepAlive: 30 * time.Second,
+		}).DialContext,
+		TLSHandshakeTimeout:   10 * time.Second,
+		ResponseHeaderTimeout: 10 * time.Second,
+		ExpectContinueTimeout: 1 * time.Second,
+	}
+
+	client := &http.Client{
+		Transport: transport,
+		Jar:       jar,
+	}
 
 	for {
 		resp, err := client.Get(url)
@@ -299,7 +313,8 @@ func DownloadValidFile(browser *rod.Browser, url string, path string, rodCookies
 			}
 			defer out.Close()
 
-			_, err = io.Copy(out, resp.Body)
+			reader := &timeoutReader{r: resp.Body, timeout: 30 * time.Second}
+			_, err = io.Copy(out, reader)
 			if err != nil {
 				fmt.Println("Read Body Error: ", err)
 				ChangeProxy()
@@ -323,6 +338,33 @@ func DownloadValidFile(browser *rod.Browser, url string, path string, rodCookies
 				continue
 			}
 		}
+	}
+}
+
+type timeoutReader struct {
+	r       io.Reader
+	timeout time.Duration
+}
+
+func (tr *timeoutReader) Read(p []byte) (int, error) {
+	c := make(chan struct {
+		n   int
+		err error
+	}, 1)
+
+	go func() {
+		n, err := tr.r.Read(p)
+		c <- struct {
+			n   int
+			err error
+		}{n, err}
+	}()
+
+	select {
+	case res := <-c:
+		return res.n, res.err
+	case <-time.After(tr.timeout):
+		return 0, os.ErrDeadlineExceeded
 	}
 }
 
