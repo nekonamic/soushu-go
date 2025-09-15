@@ -127,7 +127,6 @@ func main() {
 				} else {
 					threadPage := OpenValidPage(browser, config.BaseUrl+*href)
 					if threadPage == nil {
-						_ = threadPage.Close()
 						continue
 					}
 
