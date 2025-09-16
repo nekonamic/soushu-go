@@ -200,9 +200,11 @@ func OpenValidPage(browser *rod.Browser, url string) *rod.Page {
 		page := browser.MustPage()
 		fmt.Println("Opening: ", url)
 		err := rod.Try(func() {
-			wait := page.Timeout(10 * time.Second).WaitEvent(proto.PageDomContentEventFired{})
+			waitJS := page.Timeout(10 * time.Second).WaitNavigation(proto.PageLifecycleEventNameNetworkAlmostIdle)
+			waitDon := page.Timeout(10 * time.Second).WaitEvent(proto.PageDomContentEventFired{})
 			page.Timeout(10 * time.Second).MustNavigate(url)
-			wait()
+			waitJS()
+			waitDon()
 		})
 		if err != nil {
 			fmt.Println("Navigate Error: ", err)
