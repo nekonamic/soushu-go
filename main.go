@@ -219,10 +219,9 @@ func OpenValidPage(browser *rod.Browser, url string) *rod.Page {
 			continue
 		}
 
-		if !strings.Contains(html, "<span id=\"thread_subject\">") &&
-			(strings.Contains(html, "您浏览的太快了，歇一会儿吧！") ||
-				strings.Contains(html, "Database Error") ||
-				strings.Contains(html, "502 Bad Gateway")) {
+		if strings.Contains(html, "您浏览的太快了，歇一会儿吧！") ||
+			strings.Contains(html, "Database Error") ||
+			strings.Contains(html, "502 Bad Gateway") {
 			fmt.Println("Server Side Error")
 			_ = page.Close()
 			ChangeProxy()
