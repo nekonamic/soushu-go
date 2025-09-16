@@ -339,8 +339,10 @@ func DownloadValidFile(browser *rod.Browser, url string, path string, rodCookies
 			}
 			bodyStr := string(bodyBytes)
 
-			if strings.Contains(bodyStr, "抱歉，只有特定用户可以下载本站附件") || strings.Contains(bodyStr, "抱歉，该附件无法读取") {
-				fmt.Println("Only Unique")
+			if strings.Contains(bodyStr, "抱歉，只有特定用户可以下载本站附件") ||
+				strings.Contains(bodyStr, "抱歉，该附件无法读取") ||
+				strings.Contains(bodyStr, "Oops! System file lost") {
+				fmt.Println("Unavailable File")
 				return
 			} else {
 				ChangeProxy()
