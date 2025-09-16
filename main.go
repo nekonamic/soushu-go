@@ -213,15 +213,16 @@ func OpenValidPage(browser *rod.Browser, url string) *rod.Page {
 		fmt.Println("Opened")
 
 		html, err := page.HTML()
-		if err != nil {
+		if err != nil || len(strings.TrimSpace(html)) < 100 {
 			fmt.Println("Get HTML Error: ", err)
 			_ = page.Close()
 			continue
 		}
 
-		if strings.Contains(html, "您浏览的太快了，歇一会儿吧！") ||
-			strings.Contains(html, "Database Error") ||
-			strings.Contains(html, "502 Bad Gateway") {
+		if !strings.Contains(html, "<span id=\"thread_subject\">") &&
+			(strings.Contains(html, "您浏览的太快了，歇一会儿吧！") ||
+				strings.Contains(html, "Database Error") ||
+				strings.Contains(html, "502 Bad Gateway")) {
 			fmt.Println("Server Side Error")
 			_ = page.Close()
 			ChangeProxy()
