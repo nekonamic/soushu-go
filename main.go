@@ -240,7 +240,6 @@ func OpenValidPage(browser *rod.Browser, url string) *rod.Page {
 			strings.Contains(html, "Database Error") ||
 			strings.Contains(html, "502 Bad Gateway") {
 			fmt.Println("Server Side Error")
-			time.Sleep(10 * time.Second)
 			_ = page.Close()
 			ChangeProxy()
 			continue
@@ -440,7 +439,7 @@ func ChangeProxy() {
 		} else {
 			fmt.Println("Change Proxy Error", string(respBody))
 		}
-		time.Sleep(time.Second)
+		time.Sleep(10 * time.Second)
 	} else {
 		time.Sleep(5 * time.Second)
 	}
