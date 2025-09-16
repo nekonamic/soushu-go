@@ -216,7 +216,12 @@ func OpenValidPage(browser *rod.Browser, url string) *rod.Page {
 				}
 			}
 		})
-		if err != nil {
+		if navErr, ok := err.(*rod.NavigationError); ok {
+			if navErr.Reason == "net::ERR_HTTP2_PROTOCOL_ERROR" {
+				fmt.Println("Ignore HTTP/2 Protocol Error:", navErr)
+				continue
+			}
+		} else if err != nil {
 			fmt.Println("Navigate Error: ", err)
 			_ = page.Close()
 			ChangeProxy()
@@ -235,6 +240,7 @@ func OpenValidPage(browser *rod.Browser, url string) *rod.Page {
 			strings.Contains(html, "Database Error") ||
 			strings.Contains(html, "502 Bad Gateway") {
 			fmt.Println("Server Side Error")
+			time.Sleep(10 * time.Second)
 			_ = page.Close()
 			ChangeProxy()
 			continue
