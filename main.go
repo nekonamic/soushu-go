@@ -12,10 +12,12 @@ import (
 	"net/url"
 	"os"
 	"path/filepath"
+	"regexp"
 	"strconv"
 	"strings"
 	"time"
 
+	"github.com/PuerkitoBio/goquery"
 	"github.com/go-rod/rod"
 	"github.com/go-rod/rod/lib/launcher"
 	"github.com/go-rod/rod/lib/proto"
@@ -236,18 +238,39 @@ func OpenValidPage(browser *rod.Browser, url string) *rod.Page {
 			continue
 		}
 
-		if strings.Contains(html, "您浏览的太快了，歇一会儿吧！") ||
-			strings.Contains(html, "Database Error") ||
-			strings.Contains(html, "502 Bad Gateway") {
+		pcbTexts := []string{}
+		doc, err := goquery.NewDocumentFromReader(strings.NewReader(html))
+		if err == nil {
+			doc.Find("div.pcb").Each(func(i int, s *goquery.Selection) {
+				pcbTexts = append(pcbTexts, s.Text())
+			})
+		}
+
+		containsOutsidePCB := func(keyword string) bool {
+			if !strings.Contains(html, keyword) {
+				return false
+			}
+			for _, pcb := range pcbTexts {
+				if strings.Contains(pcb, keyword) {
+					return false
+				}
+			}
+			return true
+		}
+
+		if containsOutsidePCB("您浏览的太快了，歇一会儿吧！") ||
+			containsOutsidePCB("Database Error") ||
+			containsOutsidePCB("502 Bad Gateway") {
 			fmt.Println("Server Side Error")
 			_ = page.Close()
 			ChangeProxy()
 			continue
-		} else if strings.Contains(html, "没有找到帖子") {
+		} else if containsOutsidePCB("没有找到帖子") {
 			fmt.Println("Not Found Thread")
 			_ = page.Close()
 			return nil
 		}
+
 		return page
 	}
 }
@@ -315,6 +338,7 @@ func DownloadValidFile(browser *rod.Browser, url string, path string, rodCookies
 				panic(err)
 			}
 
+			filename = CleanFileName(filename)
 			fullPath := filepath.Join(saveDir, filename)
 			out, err := os.Create(fullPath)
 			if err != nil {
@@ -441,8 +465,27 @@ func ChangeProxy() {
 		} else {
 			fmt.Println("Change Proxy Error", string(respBody))
 		}
-		time.Sleep(10 * time.Second)
+		time.Sleep(5 * time.Second)
 	} else {
 		time.Sleep(5 * time.Second)
 	}
+}
+
+func CleanFileName(fileName string) string {
+	re := regexp.MustCompile(`[\\/:*?"<>|]`)
+	clean := re.ReplaceAllString(fileName, "_")
+
+	clean = strings.Trim(clean, " .")
+
+	reserved := map[string]struct{}{
+		"CON": {}, "PRN": {}, "AUX": {}, "NUL": {},
+		"COM1": {}, "COM2": {}, "COM3": {}, "COM4": {}, "COM5": {}, "COM6": {}, "COM7": {}, "COM8": {}, "COM9": {},
+		"LPT1": {}, "LPT2": {}, "LPT3": {}, "LPT4": {}, "LPT5": {}, "LPT6": {}, "LPT7": {}, "LPT8": {}, "LPT9": {},
+	}
+	upper := strings.ToUpper(clean)
+	if _, ok := reserved[upper]; ok {
+		clean = "_" + clean
+	}
+
+	return clean
 }
