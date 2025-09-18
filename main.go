@@ -241,6 +241,12 @@ func OpenValidPage(browser *rod.Browser, url string) *rod.Page {
 		pcbTexts := []string{}
 		doc, err := goquery.NewDocumentFromReader(strings.NewReader(html))
 		if err == nil {
+			id, exists := doc.Find("body").Attr("id")
+			if !exists || id != "nv_forum" {
+				fmt.Println("Page Glitch")
+				_ = page.Close()
+				continue
+			}
 			doc.Find("div.pcb").Each(func(i int, s *goquery.Selection) {
 				pcbTexts = append(pcbTexts, s.Text())
 			})
