@@ -266,6 +266,7 @@ func OpenValidPage(browser *rod.Browser, url string) *rod.Page {
 
 		if containsOutsidePCB("您浏览的太快了，歇一会儿吧！") ||
 			containsOutsidePCB("Database Error") ||
+			containsOutsidePCB("System Error") ||
 			containsOutsidePCB("502 Bad Gateway") {
 			fmt.Println("Server Side Error")
 			_ = page.Close()
@@ -371,6 +372,7 @@ func DownloadValidFile(browser *rod.Browser, url string, path string, rodCookies
 
 			if strings.Contains(bodyStr, "抱歉，只有特定用户可以下载本站附件") ||
 				strings.Contains(bodyStr, "抱歉，该附件无法读取") ||
+				strings.Contains(bodyStr, "抱歉，原附件链接已失效") ||
 				strings.Contains(bodyStr, "Oops! System file lost") {
 				fmt.Println("Unavailable File")
 				return
