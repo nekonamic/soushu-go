@@ -325,6 +325,7 @@ func DownloadValidFile(browser *rod.Browser, url string, path string, rodCookies
 		defer resp.Body.Close()
 
 		ct := resp.Header.Get("Content-Type")
+		ct = ConvertToUTF8(ct)
 
 		if !strings.Contains(ct, "text/html") {
 			var filename string
