@@ -272,7 +272,8 @@ func OpenValidPage(browser *rod.Browser, url string) *rod.Page {
 			_ = page.Close()
 			ChangeProxy()
 			continue
-		} else if containsOutsidePCB("没有找到帖子") {
+		} else if containsOutsidePCB("没有找到帖子") ||
+			containsOutsidePCB("抱歉，本帖要求阅读权限高于") {
 			fmt.Println("Not Found Thread")
 			_ = page.Close()
 			return nil
@@ -370,6 +371,7 @@ func DownloadValidFile(browser *rod.Browser, url string, path string, rodCookies
 				panic(err)
 			}
 			bodyStr := string(bodyBytes)
+			bodyStr = ConvertToUTF8(bodyStr)
 
 			if strings.Contains(bodyStr, "抱歉，只有特定用户可以下载本站附件") ||
 				strings.Contains(bodyStr, "抱歉，该附件无法读取") ||
