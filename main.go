@@ -476,9 +476,9 @@ func ChangeProxy() {
 		} else {
 			fmt.Println("Change Proxy Error", string(respBody))
 		}
-		time.Sleep(5 * time.Second)
+		time.Sleep(2 * time.Second)
 	} else {
-		time.Sleep(5 * time.Second)
+		time.Sleep(2 * time.Second)
 	}
 }
 
